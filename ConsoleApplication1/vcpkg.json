@@ -1,0 +1,17 @@
+{
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": [ "dx9-binding" ]
+    },
+    "imgui",
+    "directxtk"
+  ],
+  "builtin-baseline": "861c33057553ee836e7061ffbdabc25ea343145d",
+  "overrides": [
+    {
+      "name": "imgui",
+      "version": "1.89.7"
+    }
+  ]
+}
