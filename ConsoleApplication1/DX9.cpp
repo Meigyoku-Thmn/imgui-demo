@@ -3,6 +3,11 @@
 #include "imgui_impl_win32.h"
 #include <d3d9.h>
 #include <tchar.h>
+#include <Windows.h>
+#include <hidusage.h>
+#include <vector>
+
+using namespace std;
 
 static LPDIRECT3D9              g_pD3D;
 static LPDIRECT3DDEVICE9        g_pd3dDevice;
@@ -18,6 +23,42 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static UINT DesiredRenderWidth = 1067;
 static UINT DesiredRenderHeight = 600;
 
+static struct {
+    int dx = 0;
+    int dy = 0;
+} mouseInput;
+static ImVec2 winPos;
+static auto rawInputEnabled = false;
+static void EnableRawInput(HWND hwnd) {
+    if (rawInputEnabled)
+        return;
+    rawInputEnabled = true;
+    RAWINPUTDEVICE device{
+        .usUsagePage = HID_USAGE_PAGE_GENERIC,
+        .usUsage = HID_USAGE_GENERIC_MOUSE,
+        .hwndTarget = hwnd,
+    };
+    RegisterRawInputDevices(&device, 1, sizeof(device));
+    winPos = {};
+}
+static void DisableRawInput() {
+    rawInputEnabled = false;
+}
+static void HandleRawInput(HRAWINPUT hRawInput) {
+    static vector<BYTE> buffer;
+    UINT size{};
+    auto rs = GetRawInputData(hRawInput, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
+    buffer.reserve(size);
+    auto raw = (RAWINPUT*)buffer.data();
+    rs = GetRawInputData(hRawInput, RID_INPUT, raw, &size, sizeof(RAWINPUTHEADER));
+    if (raw->header.dwType == RIM_TYPEMOUSE) {
+        mouseInput.dx = raw->data.mouse.lLastX;
+        mouseInput.dy = raw->data.mouse.lLastY;
+        winPos.x += mouseInput.dx;
+        winPos.y += mouseInput.dy;
+    }
+}
+
 int useDX9() {
     WNDCLASSEXW wc{
         .cbSize = sizeof(wc),
@@ -28,7 +69,7 @@ int useDX9() {
     };
     RegisterClassExW(&wc);
 
-    RECT r{ .right = (LONG)DesiredRenderWidth, .bottom = (LONG)DesiredRenderHeight };
+    RECT r{.right = (LONG)DesiredRenderWidth, .bottom = (LONG)DesiredRenderHeight};
     auto rs = AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     auto hwnd = CreateWindowW(
         wc.lpszClassName,                   // Class name
@@ -65,7 +106,7 @@ int useDX9() {
     ImGui_ImplWin32_SetMousePosScale(1, 1);
 
     auto show_demo_window = true;
-    auto show_another_window = true;
+    auto show_debug_window = true;
     auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     auto done = false;
@@ -98,35 +139,36 @@ int useDX9() {
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");
-
+        if (ImGui::Begin("Hello, world!")) {
             ImGui::Text("This is some useful text.");
             ImGui::Checkbox("Demo Window", &show_demo_window);
-            ImGui::Checkbox("Another Window", &show_another_window);
-
+            ImGui::Checkbox("Debug Window", &show_debug_window);
+            static float f = 0.0f;
+            static int counter = 0;
             ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
             ImGui::ColorEdit3("clear color", (float*)&clear_color);
-
             if (ImGui::Button("Button"))
                 counter++;
             ImGui::SameLine();
             ImGui::Text("counter = %d", counter);
-
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        }
+        ImGui::End();
+
+        if (show_debug_window) {
+            if (ImGui::Begin("Debug Window", &show_debug_window)) {
+                if (ImGui::Button("Enable Raw Input"))
+                    EnableRawInput(hwnd);
+                ImGui::Text("DX = %d, DY = %d", mouseInput.dx, mouseInput.dy);
+            }
             ImGui::End();
         }
 
-        if (show_another_window) {
-            ImGui::Begin("Another Window", &show_another_window);
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
+        ImGui::SetNextWindowPos(winPos);
+        if (ImGui::Begin("Test Window")) {
+            ImGui::Text("Test Window");
         }
+        ImGui::End();
 
         ImGui::EndFrame();
 
@@ -218,6 +260,10 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
     switch (msg) {
+        case WM_INPUT: {
+            HandleRawInput((HRAWINPUT)lParam);
+            return 0;
+        }
         case WM_SIZE:
             if (wParam == SIZE_MINIMIZED)
                 return 0;
@@ -229,6 +275,7 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 return 0;
             break;
         case WM_DESTROY:
+            DisableRawInput();
             PostQuitMessage(0);
             return 0;
     }
