@@ -15,8 +15,8 @@ static void CleanupDeviceD3D();
 static void ResetDevice();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-static UINT DesiredRenderWidth = 640;
-static UINT DesiredRenderHeight = 480;
+static UINT DesiredRenderWidth = 1067;
+static UINT DesiredRenderHeight = 600;
 
 int useDX8() {
     WNDCLASSEXW wc{
@@ -56,14 +56,16 @@ int useDX8() {
     auto& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
+    if (!io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/tahoma.ttf", 18))
+        io.Fonts->AddFontDefault();
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX8_Init(g_pd3dDevice);
 
-    //ImGui_ImplWin32_SetMousePosScale(1, 1);
+    ImGui_ImplWin32_SetMousePosScale(1, 1);
 
     auto show_demo_window = true;
-    auto show_another_window = false;
+    auto show_another_window = true;
     auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     auto done = false;
@@ -79,12 +81,12 @@ int useDX8() {
             break;
 
         if (g_ResizeWidth != 0 && g_ResizeHeight != 0) {
-            //g_d3dpp.BackBufferWidth = g_ResizeWidth;
-            //g_d3dpp.BackBufferHeight = g_ResizeHeight;
-            //ImGui_ImplWin32_SetMousePosScale(
-            //    (float)g_ResizeWidth / g_d3dpp.BackBufferWidth,
-            //    (float)g_ResizeHeight / g_d3dpp.BackBufferHeight
-            //);
+            g_d3dpp.BackBufferWidth = g_ResizeWidth;
+            g_d3dpp.BackBufferHeight = g_ResizeHeight;
+            ImGui_ImplWin32_SetMousePosScale(
+                (float)g_ResizeWidth / g_d3dpp.BackBufferWidth,
+                (float)g_ResizeHeight / g_d3dpp.BackBufferHeight
+            );
             g_ResizeWidth = g_ResizeHeight = 0;
             ResetDevice();
         }
