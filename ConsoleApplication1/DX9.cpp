@@ -38,13 +38,15 @@ static void EnableRawInput(HWND hwnd) {
         .usUsage = HID_USAGE_GENERIC_MOUSE,
         .hwndTarget = hwnd,
     };
-    RegisterRawInputDevices(&device, 1, sizeof(device));
+    auto rs = RegisterRawInputDevices(&device, 1, sizeof(device));
     winPos = {};
 }
 static void DisableRawInput() {
     rawInputEnabled = false;
 }
 static void HandleRawInput(HRAWINPUT hRawInput) {
+    if (!rawInputEnabled)
+        return;
     static vector<BYTE> buffer;
     UINT size{};
     auto rs = GetRawInputData(hRawInput, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
@@ -56,7 +58,18 @@ static void HandleRawInput(HRAWINPUT hRawInput) {
         mouseInput.dy = raw->data.mouse.lLastY;
         winPos.x += mouseInput.dx;
         winPos.y += mouseInput.dy;
+        if (winPos.x < 0) winPos.x = 0;
+        if (winPos.y < 0) winPos.y = 0;
+        if (winPos.x >= g_d3dpp.BackBufferWidth) winPos.x = g_d3dpp.BackBufferWidth - 1;
+        if (winPos.y >= g_d3dpp.BackBufferHeight) winPos.y = g_d3dpp.BackBufferHeight - 1;
     }
+}
+
+static POINT GetPointerPosition(HWND hwnd) {
+    POINT pointerPosition;
+    GetCursorPos(&pointerPosition);
+    ScreenToClient(hwnd, &pointerPosition);
+    return pointerPosition;
 }
 
 int useDX9() {
@@ -69,7 +82,7 @@ int useDX9() {
     };
     RegisterClassExW(&wc);
 
-    RECT r{.right = (LONG)DesiredRenderWidth, .bottom = (LONG)DesiredRenderHeight};
+    RECT r{ .right = (LONG)DesiredRenderWidth, .bottom = (LONG)DesiredRenderHeight };
     auto rs = AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     auto hwnd = CreateWindowW(
         wc.lpszClassName,                   // Class name
@@ -157,15 +170,26 @@ int useDX9() {
 
         if (show_debug_window) {
             if (ImGui::Begin("Debug Window", &show_debug_window)) {
-                if (ImGui::Button("Enable Raw Input"))
-                    EnableRawInput(hwnd);
+
+                if (ImGui::Button(rawInputEnabled ? "Disable Raw Input" : "Enable Raw Input")) {
+                    if (!rawInputEnabled)
+                        EnableRawInput(hwnd);
+                    else
+                        DisableRawInput();
+                }
                 ImGui::Text("DX = %d, DY = %d", mouseInput.dx, mouseInput.dy);
             }
             ImGui::End();
         }
 
-        ImGui::SetNextWindowPos(winPos);
-        if (ImGui::Begin("Test Window")) {
+        auto cursorPos = winPos;
+        if (!rawInputEnabled) {
+            auto pointerPos = GetPointerPosition(hwnd);
+            cursorPos.x = pointerPos.x;
+            cursorPos.y = pointerPos.y;
+        }
+        ImGui::SetNextWindowPos(cursorPos);
+        if (ImGui::Begin("Test Window", nullptr, ImGuiWindowFlags_NoMouseInputs)) {
             ImGui::Text("Test Window");
         }
         ImGui::End();
